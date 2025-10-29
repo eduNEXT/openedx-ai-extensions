@@ -63,8 +63,16 @@ strict-naming = false
 include = ["/openedx_ai_extensions", ".hatch_build.py"]
 exclude = ["tests*"]
 
+[tool.hatch.build.targets.sdist.force-include]
+"../backend" = "backend"
+"../frontend" = "frontend"
+
 [tool.hatch.build.targets.wheel]
 packages = ["openedx_ai_extensions"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"../backend" = "backend"
+"../frontend" = "frontend"
 
 # F401: unused-import
 # F841: unused-variable

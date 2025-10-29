@@ -14,9 +14,18 @@ from .__about__ import __version__
 ########################
 
 PLUGIN_DIR = Path(__file__).parent
-REPO_ROOT = PLUGIN_DIR.parent.parent
-FRONTEND_PATH = REPO_ROOT / "frontend"
-BACKEND_PATH = REPO_ROOT / "backend"
+
+# Try to locate backend and frontend directories
+# First, check if they're in the package root (pip install scenario)
+PACKAGE_ROOT = PLUGIN_DIR.parent
+if (PACKAGE_ROOT / "backend").exists() and (PACKAGE_ROOT / "frontend").exists():
+    FRONTEND_PATH = PACKAGE_ROOT / "frontend"
+    BACKEND_PATH = PACKAGE_ROOT / "backend"
+else:
+    # Fall back to development scenario (repository root)
+    REPO_ROOT = PLUGIN_DIR.parent.parent
+    FRONTEND_PATH = REPO_ROOT / "frontend"
+    BACKEND_PATH = REPO_ROOT / "backend"
 
 # Makes the UI Slots code available for local install during the build process
 hooks.Filters.DOCKER_BUILD_COMMAND.add_items([
