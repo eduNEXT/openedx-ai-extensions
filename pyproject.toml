@@ -69,7 +69,6 @@ include = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["tutor/openedx_ai_extensions"]
-bypass-selection = true
 only-include = [
     "tutor/openedx_ai_extensions",
 ]
