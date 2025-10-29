@@ -15,17 +15,11 @@ from .__about__ import __version__
 
 PLUGIN_DIR = Path(__file__).parent
 
-# Try to locate backend and frontend directories
-# First, check if they're in the package root (pip install scenario)
+# Locate backend and frontend directories
+# They should be siblings to the openedx_ai_extensions package
 PACKAGE_ROOT = PLUGIN_DIR.parent
-if (PACKAGE_ROOT / "backend").exists() and (PACKAGE_ROOT / "frontend").exists():
-    FRONTEND_PATH = PACKAGE_ROOT / "frontend"
-    BACKEND_PATH = PACKAGE_ROOT / "backend"
-else:
-    # Fall back to development scenario (repository root)
-    REPO_ROOT = PLUGIN_DIR.parent.parent
-    FRONTEND_PATH = REPO_ROOT / "frontend"
-    BACKEND_PATH = REPO_ROOT / "backend"
+FRONTEND_PATH = PACKAGE_ROOT / "openedx-ai-extensions-frontend"
+BACKEND_PATH = PACKAGE_ROOT / "openedx-ai-extensions-backend"
 
 # Makes the UI Slots code available for local install during the build process
 hooks.Filters.DOCKER_BUILD_COMMAND.add_items([
@@ -36,7 +30,7 @@ hooks.Filters.DOCKER_BUILD_COMMAND.add_items([
 @hooks.Filters.IMAGES_BUILD_MOUNTS.add()
 def _mount_sample_plugin(mounts, path):
     """Mount the sample plugin source code for development."""
-    mounts += [("openedx-ai-extensions/backend", "/openedx/openedx-ai-extensions/backend")]
+    mounts += [("openedx-ai-extensions-backend", "/openedx/openedx-ai-extensions/backend")]
     return mounts
 
 # Actually connects the patch files as tutor env patches
