@@ -73,16 +73,12 @@ class AIWorkflowConfig(models.Model):
             orchestrator_class="DirectLLMResponse",
             # orchestrator_class="MockResponse",
             processor_config={
-                "OpenEdXProcessor": {
-                    "function": "get_unit_content",
-                    "char_limit": 300,
-                },
                 "MCPLLMProcessor": {
                     'config': "default",
                     "function": "explain_like_five",
                     "mcp_config": {
                         "server_label": "openedx_server",
-                        "server_url": "https://9cdf5c9e1a44.ngrok-free.app/openedx-ai-extensions/v1/mcp",
+                        "server_url": "https://829fb7b42ee4.ngrok-free.app/openedx-ai-extensions/v1/mcp",
                         "require_approval": "never",
                     },
                 },
