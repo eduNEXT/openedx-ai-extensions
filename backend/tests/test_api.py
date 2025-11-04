@@ -4,9 +4,9 @@ Tests for the `openedx-ai-extensions` API endpoints.
 
 import pytest
 from django.contrib.auth import get_user_model
-from django.test import Client
 from django.urls import reverse
 from opaque_keys.edx.keys import CourseKey
+from rest_framework.test import APIClient
 
 User = get_user_model()
 
@@ -14,9 +14,9 @@ User = get_user_model()
 @pytest.fixture
 def api_client():
     """
-    Return a Django test client.
+    Return a REST framework API client.
     """
-    return Client()
+    return APIClient()
 
 
 @pytest.fixture
