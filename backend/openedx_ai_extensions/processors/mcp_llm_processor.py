@@ -38,6 +38,19 @@ class MCPLLMProcessor:
         function = getattr(self, function_name)
         return function(input_data)
 
+    def _extract_response_content(self, response):
+        """Extract text content from LiteLLM response."""
+        if not hasattr(response, "output") or not response.output:
+            return ""
+
+        for item in response.output:
+            if getattr(item, "type", None) != "message":
+                continue
+            for content_item in item.content:
+                if getattr(content_item, "type", None) == "output_text":
+                    return content_item.text
+        return ""
+
     def _call_responses_api(self, system_role, context):
         """
         General method to call LiteLLM completion API
@@ -72,15 +85,7 @@ class MCPLLMProcessor:
                 completion_params["max_tokens"] = self.max_tokens
 
             response = responses(**completion_params)
-            if hasattr(response, "output") and response.output:
-                for item in response.output:
-                    # Find the assistant message
-                    if getattr(item, "type", None) == "message":
-                        for c in item.content:
-                            if getattr(c, "type", None) == "output_text":
-                                content = c.text  # ✅ This is your clean text
-            else:
-                content = ""
+            content = self._extract_response_content(response)
 
             return {
                 "response": content,

@@ -7,11 +7,12 @@ tools and resources for AI assistants to interact with the OpenEdx system.
 
 import logging
 
-from .djangomcp import DjangoMCP
-from opaque_keys.edx.keys import UsageKey
 from asgiref.sync import sync_to_async
-from fastmcp.server.middleware.logging import StructuredLoggingMiddleware
 from fastmcp.server.middleware.error_handling import ErrorHandlingMiddleware
+from fastmcp.server.middleware.logging import StructuredLoggingMiddleware
+from opaque_keys.edx.keys import UsageKey
+
+from .djangomcp import DjangoMCP
 
 logger = logging.getLogger(__name__)
 
@@ -22,8 +23,9 @@ mcp = DjangoMCP(
 mcp.add_middleware(StructuredLoggingMiddleware())
 mcp.add_middleware(ErrorHandlingMiddleware())
 
+
 @mcp.tool()
-async def get_unit_content(course_id: str, unit_id: str) -> dict:
+async def get_unit_content(course_id: str, unit_id: str) -> dict:  # pylint: disable=unused-argument
     """Extract unit content from Open edX modulestore"""
 
     try:

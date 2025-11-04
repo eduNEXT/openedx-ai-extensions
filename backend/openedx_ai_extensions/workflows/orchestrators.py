@@ -3,8 +3,9 @@ Orchestrators
 Base classes to hold the logic of execution in ai workflows
 """
 
-from openedx_ai_extensions.processors import CompletionLLMProcessor, OpenEdXProcessor, MCPLLMProcessor
 import logging
+
+from openedx_ai_extensions.processors import MCPLLMProcessor
 
 logger = logging.getLogger(__name__)
 

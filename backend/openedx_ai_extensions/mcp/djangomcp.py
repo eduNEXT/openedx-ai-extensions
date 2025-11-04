@@ -1,11 +1,14 @@
+"""
+Django MCP integration module.
+
+This module provides utilities for integrating FastMCP with Django applications.
+"""
 import contextvars
 import json
 import logging
-from importlib import import_module
 from typing import TYPE_CHECKING
 
 from asgiref.sync import async_to_sync
-from django.conf import settings
 from django.core.serializers.json import DjangoJSONEncoder
 from django.http import HttpRequest, HttpResponse
 from fastmcp import FastMCP
@@ -92,6 +95,12 @@ async def _call_starlette_handler(
 # Copyright (c) 2025 Omar BENHAMID
 # Licensed under the MIT License
 class DjangoMCP(FastMCP):
+    """
+    Django-integrated FastMCP server.
+
+    Adapted from django-mcp-server by Omar BENHAMID.
+    """
+
     def __init__(self, **kwargs):
         # Prevent extra server settings as we do not use the embedded server
         super().__init__(**kwargs)

@@ -4,10 +4,10 @@ Version 1 API URLs
 
 from django.urls import path
 
-from .pipelines.views import AIGenericWorkflowView
-from .mcp.views import MCPServerStreamableHttpView
-
 from openedx_ai_extensions.mcp.server import mcp
+
+from .mcp.views import MCPServerStreamableHttpView
+from .pipelines.views import AIGenericWorkflowView
 
 app_name = "v1"
 
