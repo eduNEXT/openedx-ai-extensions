@@ -5,7 +5,7 @@ Version 1 API URLs
 from django.urls import path
 
 from .pipelines.views import AIGenericWorkflowView
-from mcp_server.views import MCPServerStreamableHttpView
+from .mcp.views import MCPServerStreamableHttpView
 
 from openedx_ai_extensions.mcp.server import mcp
 
