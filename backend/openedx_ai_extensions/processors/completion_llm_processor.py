@@ -20,6 +20,7 @@ class CompletionLLMProcessor:
         self.config = config.get(class_name, {})
 
         self.config_profile = self.config.get("config", "default")
+        self.mcp_config = self.config.get("mcp_config", {})
 
         # Extract API configuration once during initialization
         self.api_key = settings.AI_EXTENSIONS[self.config_profile]['API_KEY']
@@ -54,6 +55,14 @@ class CompletionLLMProcessor:
                     {"role": "user", "content": user_content},
                 ],
                 "api_key": self.api_key,
+                "tools": [
+                    {
+                        "type": "mcp",
+                        "server_label": self.mcp_config.get("server_label", "openedx_server"),
+                        "server_url": self.mcp_config.get("server_url", ""),
+                        "require_approval": self.mcp_config.get("require_approval", "never"),
+                    },
+                ],
             }
 
             # Add optional parameters only if configured

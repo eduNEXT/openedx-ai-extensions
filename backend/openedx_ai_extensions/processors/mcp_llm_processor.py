@@ -34,7 +34,7 @@ class MCPLLMProcessor:
 
     def process(self, input_data):
         """Process based on configured function"""
-        function_name = self.config.get("function", "summarize_content")
+        function_name = self.config.get("function", "explain_like_five")
         function = getattr(self, function_name)
         return function(input_data)
 
