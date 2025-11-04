@@ -6,7 +6,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def plugin_settings(settings):
+def plugin_settings(settings):  # pylint: disable=unused-argument
     """
     Add plugin settings to main settings object.
 
