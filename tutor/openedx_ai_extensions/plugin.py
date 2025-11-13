@@ -65,5 +65,19 @@ PLUGIN_SLOTS.add_items(
             },
           }""",
         ),
+(
+            "authoring",
+            "org.openedx.frontend.authoring.course_outline_header_actions.v1",
+            """
+          {
+            op: PLUGIN_OPERATIONS.Insert,
+            widget: {
+                id: 'ai-assist-button',
+                priority: 10,
+                type: DIRECT_PLUGIN,
+                RenderWidget: GetAIAssistanceButton,
+            },
+          }""",
+        ),
     ]
 )
