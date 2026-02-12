@@ -8,6 +8,8 @@ import logging
 from django.conf import settings
 from submissions import api as submissions_api
 
+from openedx_ai_extensions.error_handler import get_error_info
+
 logger = logging.getLogger(__name__)
 
 
@@ -146,7 +148,13 @@ class SubmissionProcessor:
                 ),
             }
         else:
-            return {"error": "No submission ID associated with the session"}
+            return {
+                "error": {
+                    "code": "BAD_REQUEST",
+                    "message": "No submission ID associated with the session"
+                },
+                "status": "error"
+            }
 
     def get_previous_messages(self, current_messages_count=0):
         """
@@ -183,8 +191,15 @@ class SubmissionProcessor:
                 ),
             }
         except Exception as e:  # pylint: disable=broad-exception-caught
-            logger.exception(f"Error retrieving previous messages: {e}")
-            return {"error": f"Failed to load previous messages: {str(e)}"}
+            code, message, _ = get_error_info(e)
+            logger.exception("🤖 [SUBMISSION PROCESSOR] TECHNICAL ERROR [%s] in get_previous_messages: %s", code, str(e))
+            return {
+                "error": {
+                    "code": code,
+                    "message": message,
+                },
+                "status": "error"
+            }
 
     def update_chat_submission(self, messages):
         """

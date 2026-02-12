@@ -15,6 +15,7 @@ from openedx_ai_extensions.processors.openedx.utils.component_extractors import 
     extract_generic_info,
     extract_problem_info,
 )
+from openedx_ai_extensions.error_handler import get_error_info
 
 logger = logging.getLogger(__name__)
 
@@ -107,8 +108,16 @@ class OpenEdXProcessor:
 
             return unit_info
 
-        except Exception as exc:  # pylint: disable=broad-exception-caught
-            return {"error": f"Error accessing content: {str(exc)}"}
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            code, message, _ = get_error_info(e)
+            logger.exception("🤖 [OPENEDX_PROCESSOR] TECHNICAL ERROR [%s] in get_location_content: %s", code, str(e))
+            return {
+                "error": {
+                    "code": code,
+                    "message": message,
+                },
+                "status": "error"
+            }
 
     def _extract_block(self, store, block_key):
         """Helper to extract block info safely"""

@@ -8,6 +8,7 @@ from pathlib import Path
 
 from litellm import completion
 
+from openedx_ai_extensions.error_handler import get_error_info
 from openedx_ai_extensions.processors.llm.litellm_base_processor import LitellmProcessor
 from openedx_ai_extensions.processors.llm.providers import adapt_to_provider
 
@@ -64,8 +65,15 @@ class EducatorAssistantProcessor(LitellmProcessor):
             }
 
         except Exception as e:  # pylint: disable=broad-exception-caught
-            logger.exception(f"Error calling LiteLLM: {e}")
-            return {"error": f"AI processing failed: {str(e)}"}
+            code, message, _ = get_error_info(e)
+            logger.exception("🤖 [EDUCATOR ASSISTANT] TECHNICAL ERROR [%s]: %s", code, str(e))
+            return {
+                "error": {
+                    "code": code,
+                    "message": message,
+                },
+                "status": "error"
+            }
 
     def generate_quiz_questions(self, input_data):
         """Generate quiz questions based on the content provided"""
@@ -81,8 +89,15 @@ class EducatorAssistantProcessor(LitellmProcessor):
             with open(prompt_file_path, "r") as f:
                 prompt = f.read()
         except Exception as e:  # pylint: disable=broad-exception-caught
-            logger.exception(f"Error loading prompt template: {e}")
-            return {"error": "Failed to load prompt template."}
+            # This is a development/operator error (missing file)
+            logger.exception("🤖 [EDUCATOR ASSISTANT] PROMPT LOAD ERROR: %s", str(e))
+            return {
+                "error": {
+                    "code": "INTERNAL_SERVER_ERROR",
+                    "message": "The AI assistant is temporarily out of service. Please try again later.",
+                },
+                "status": "error"
+            }
 
         if '{{NUM_QUESTIONS}}' in prompt:
             prompt = prompt.replace("{{NUM_QUESTIONS}}", str(requested_questions))
@@ -105,7 +120,11 @@ class EducatorAssistantProcessor(LitellmProcessor):
                 tokens_used += result.get("tokens_used", 0)
                 if attempt == 2:
                     return {
-                        "error": "Failed to parse AI response as JSON after multiple attempts.",
+                        "error": {
+                            "code": "INTERNAL_SERVER_ERROR",
+                            "message": "Failed to parse AI response as JSON after multiple attempts.",
+                        },
+                        "status": "error",
                         "tokens_used": tokens_used,
                         "model_used": self.extra_params.get("model", "unknown"),
                     }

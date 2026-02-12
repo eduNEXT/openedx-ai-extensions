@@ -22,6 +22,8 @@ from rest_framework.views import APIView
 from openedx_ai_extensions.utils import is_generator
 from openedx_ai_extensions.workflows.models import AIWorkflowScope
 
+from openedx_ai_extensions.error_handler import get_error_info
+from openedx_ai_extensions.error_handler import get_error_info
 from .serializers import AIWorkflowProfileSerializer
 
 logger = logging.getLogger(__name__)
@@ -104,37 +106,36 @@ class AIGenericWorkflowView(View):
                     content_type="text/plain"
                 )
 
-            # Check result status and return appropriate HTTP status
-            result_status = result.get("status", "success")
-            if result_status == "error":
-                http_status = 500  # Internal Server Error for processing failures
-            elif result_status in ["validation_error", "bad_request"]:
-                http_status = 400  # Bad Request for validation issues
-            else:
-                http_status = 200  # Success for completed/success status
-
-            return JsonResponse(result, status=http_status)
-
-        except ValidationError as e:
-            logger.warning("🤖 WORKFLOW VALIDATION ERROR: %s", str(e))
+            status_code_map = {
+                "error": 500,
+                "validation_error": 400,
+                "bad_request": 400,
+            }
             return JsonResponse(
-                {
-                    "error": str(e),
-                    "status": "validation_error",
-                    "timestamp": datetime.now().isoformat(),
-                },
-                status=400,
+                result,
+                status=status_code_map.get(result.get("status"), 200)
             )
 
         except Exception as e:  # pylint: disable=broad-exception-caught
-            logger.error("🤖 WORKFLOW ERROR: %s", str(e))
+            # Map exception to safe user message and status code
+            code, message, http_status = get_error_info(e)
+
+            # Operator Logging: Log full traceback for technical errors (500s)
+            if http_status >= 500:
+                logger.exception("🤖 AI_WORKFLOW [%s] TECHNICAL ERROR: %s", code, str(e))
+            else:
+                logger.warning("🤖 AI_WORKFLOW [%s] CLIENT WARNING: %s", code, str(e))
+
             return JsonResponse(
                 {
-                    "error": str(e),
+                    "error": {
+                        "code": code,
+                        "message": message,
+                    },
                     "status": "error",
                     "timestamp": datetime.now().isoformat(),
                 },
-                status=500,
+                status=http_status,
             )
 
 
@@ -172,24 +173,24 @@ class AIWorkflowProfileView(APIView):
 
             return Response(response_data, status=status.HTTP_200_OK)
 
-        except ValidationError as e:
-            logger.warning("🤖 CONFIG PROFILE VALIDATION ERROR: %s", str(e))
-            return Response(
-                {
-                    "error": str(e),
-                    "status": "validation_error",
-                    "timestamp": datetime.now().isoformat(),
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
         except Exception as e:  # pylint: disable=broad-exception-caught
-            logger.error("🤖 CONFIG PROFILE ERROR: %s", str(e))
+            # Map exception to safe user message and status code
+            code, message, http_status = get_error_info(e)
+
+            # Operator Logging
+            if http_status >= 500:
+                logger.exception("🤖 AI_PROFILE [%s] TECHNICAL ERROR: %s", code, str(e))
+            else:
+                logger.warning("🤖 AI_PROFILE [%s] CLIENT WARNING: %s", code, str(e))
+
             return Response(
                 {
-                    "error": str(e),
+                    "error": {
+                        "code": code,
+                        "message": message,
+                    },
                     "status": "error",
                     "timestamp": datetime.now().isoformat(),
                 },
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                status=http_status,
             )

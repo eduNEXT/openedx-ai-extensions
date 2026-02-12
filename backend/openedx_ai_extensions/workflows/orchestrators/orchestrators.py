@@ -12,6 +12,7 @@ from openedx_ai_extensions.processors import (
     LLMProcessor,
     OpenEdXProcessor,
 )
+from openedx_ai_extensions.error_handler import get_error_info
 from openedx_ai_extensions.utils import is_generator
 from openedx_ai_extensions.xapi.constants import (
     EVENT_NAME_WORKFLOW_COMPLETED,
@@ -94,7 +95,7 @@ class DirectLLMResponse(BaseOrchestrator):
         if content_result and 'error' in content_result:
             return {
                 'error': content_result['error'],
-                'status': 'OpenEdXProcessor error'
+                'status': 'error'
             }
 
         # Convert fetched content to a string format suitable for the LLM
@@ -112,10 +113,7 @@ class DirectLLMResponse(BaseOrchestrator):
         # --- 5. Handle LLM Error (Non-Streaming) ---
         if llm_result and 'error' in llm_result:
             # Early return on error during non-streaming LLM processing
-            return {
-                'error': llm_result['error'],
-                'status': 'LLMProcessor error'
-            }
+            return llm_result
 
         # 6. Emit completed event for one-shot workflow
         self._emit_workflow_event(EVENT_NAME_WORKFLOW_COMPLETED)
@@ -158,7 +156,7 @@ class EducatorAssistantOrchestrator(SessionBasedOrchestrator):
         content_result = openedx_processor.process()
 
         if 'error' in content_result:
-            return {'error': content_result['error'], 'status': 'OpenEdXProcessor error'}
+            return {'error': content_result['error'], 'status': 'error'}
 
         # 2. Process with LLM processor
         llm_processor = EducatorAssistantProcessor(
@@ -169,7 +167,7 @@ class EducatorAssistantOrchestrator(SessionBasedOrchestrator):
         llm_result = llm_processor.process(input_data=input_data)
 
         if 'error' in llm_result:
-            return {'error': llm_result['error'], 'status': 'LLMProcessor error'}
+            return {'error': llm_result['error'], 'status': 'error'}
 
         lib_key_str = input_data.get('library_id')
 
@@ -309,7 +307,7 @@ class ThreadedLLMResponse(SessionBasedOrchestrator):
             if "error" in history_result:
                 return {
                     "error": history_result["error"],
-                    "status": "SubmissionProcessor error",
+                    "status": "error",
                 }
             return {
                 "response": history_result.get("response", "No response available"),
@@ -328,7 +326,7 @@ class ThreadedLLMResponse(SessionBasedOrchestrator):
         if "error" in content_result:
             return {
                 "error": content_result["error"],
-                "status": "OpenEdXProcessor error",
+                "status": "error",
             }
 
         # 3. Process with LLM processor
@@ -355,7 +353,7 @@ class ThreadedLLMResponse(SessionBasedOrchestrator):
 
         # --- BRANCH B: Handle Error ---
         if "error" in llm_result:
-            return {"error": llm_result["error"], "status": "ResponsesProcessor error"}
+            return {"error": llm_result["error"], "status": "error"}
 
         # --- BRANCH C: Handle Non-Streaming (Standard) ---
         messages = [
@@ -372,7 +370,7 @@ class ThreadedLLMResponse(SessionBasedOrchestrator):
         submission_processor.update_chat_submission(messages)
 
         if "error" in llm_result:
-            return {"error": llm_result["error"], "status": "LLMProcessor error"}
+            return {"error": llm_result["error"], "status": "error"}
 
         # Emit appropriate event based on interaction state
         if is_first_interaction:

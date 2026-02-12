@@ -7,6 +7,7 @@ import logging
 
 from litellm import completion, responses
 
+from openedx_ai_extensions.error_handler import get_error_info
 from openedx_ai_extensions.functions.decorators import AVAILABLE_TOOLS
 from openedx_ai_extensions.processors.llm.litellm_base_processor import LitellmProcessor
 from openedx_ai_extensions.processors.llm.providers import adapt_to_provider, after_tool_call_adaptations
@@ -49,8 +50,9 @@ class LLMProcessor(LitellmProcessor):
                     yield content.encode('utf-8')
 
         except Exception as e:  # pylint: disable=broad-exception-caught
-            logger.error(f"Error during AI streaming: {e}", exc_info=True)
-            yield f"\n[AI Error: {e}]".encode("utf-8")
+            code, message, _ = get_error_info(e)
+            logger.exception("🤖 [LLM STREAM] TECHNICAL ERROR [%s]: %s", code, str(e))
+            yield f"\n[AI Service Error: {message}]".encode("utf-8")
             return
 
         # Log tokens at end
@@ -152,8 +154,9 @@ class LLMProcessor(LitellmProcessor):
                 logger.info("[LLM STREAM] Tokens used: unknown (model did not report)")
 
         except Exception as e:  # pylint: disable=broad-exception-caught
-            logger.error(f"Error during threaded AI streaming: {e}", exc_info=True)
-            yield f"\n[AI Error: {e}]"
+            code, message, _ = get_error_info(e)
+            logger.exception("🤖 [LLM THREADED STREAM] TECHNICAL ERROR [%s]: %s", code, str(e))
+            yield f"\n[AI Service Error: {message}]"
 
     def _call_responses_wrapper(self, params, initialize=False):
         """
@@ -188,8 +191,15 @@ class LLMProcessor(LitellmProcessor):
             return result
 
         except Exception as e:  # pylint: disable=broad-exception-caught
-            logger.exception(f"Error calling LiteLLM: {e}")
-            return {"error": f"AI processing failed: {str(e)}"}
+            code, message, _ = get_error_info(e)
+            logger.exception("🤖 [LLM RESPONSES] TECHNICAL ERROR [%s]: %s", code, str(e))
+            return {
+                "error": {
+                    "code": code,
+                    "message": message,
+                },
+                "status": "error"
+            }
 
     def _call_completion_wrapper(self, system_role):
         """
@@ -235,11 +245,15 @@ class LLMProcessor(LitellmProcessor):
                 return self._handle_non_streaming_completion(response)  # Return the dictionary
 
         except Exception as e:  # pylint: disable=broad-exception-caught
-            # Catch errors that occur during the INITIAL API call (before streaming starts)
-            error_message = f"Error during initial AI completion call: {e}"
-            logger.exception(error_message, exc_info=True)
-            # Always return a dictionary error in this outer block
-            return {"error": f"AI processing failed: {str(e)}"}
+            code, message, _ = get_error_info(e)
+            logger.exception("🤖 [LLM COMPLETION] TECHNICAL ERROR [%s]: %s", code, str(e))
+            return {
+                "error": {
+                    "code": code,
+                    "message": message,
+                },
+                "status": "error"
+            }
 
     def _completion_with_tools(self, tool_calls, params):
         """Handle tool calls recursively until no more tool calls are present."""
@@ -248,9 +262,14 @@ class LLMProcessor(LitellmProcessor):
             function_to_call = AVAILABLE_TOOLS[function_name]
             function_args = json.loads(tool_call.function.arguments)
 
-            function_response = function_to_call(
-                **function_args,
-            )
+            try:
+                function_response = function_to_call(
+                    **function_args,
+                )
+            except Exception as e:  # pylint: disable=broad-exception-caught
+                logger.error("🤖 [LLM TOOL CALL] ERROR in %s: %s", function_name, str(e))
+                function_response = f"Error executing tool {function_name}: {str(e)}"
+
             params["messages"].append(
                 {
                     "tool_call_id": tool_call.id,
@@ -283,9 +302,14 @@ class LLMProcessor(LitellmProcessor):
             function_to_call = AVAILABLE_TOOLS[function_name]
             function_args = json.loads(tool_call.arguments)
 
-            function_response = function_to_call(
-                **function_args,
-            )
+            try:
+                function_response = function_to_call(
+                    **function_args,
+                )
+            except Exception as e:  # pylint: disable=broad-exception-caught
+                logger.error("🤖 [LLM RESPONSES TOOL CALL] ERROR in %s: %s", function_name, str(e))
+                function_response = f"Error executing tool {function_name}: {str(e)}"
+
             params["input"].append({
                 "type": "function_call_output",
                 "call_id": tool_call.call_id,

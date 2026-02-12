@@ -7,6 +7,7 @@ from uuid import uuid4
 from opaque_keys.edx.locator import LibraryLocatorV2
 
 from openedx_ai_extensions.edxapp_wrapper.content_libraries_module import get_content_libraries
+from openedx_ai_extensions.error_handler import get_error_info
 
 logger = logging.getLogger(__name__)
 
@@ -29,8 +30,14 @@ class ContentLibraryProcessor:
         collection = self.create_collection(title=title, description=description)
 
         if not collection:
-            logger.error("Failed to create collection.")
-            raise Exception("Collection creation failed.")
+            logger.error("🤖 [CONTENT LIBRARY] Failed to create collection.")
+            return {
+                "error": {
+                    "code": "INTERNAL_SERVER_ERROR",
+                    "message": "Failed to create a collection for the generated items.",
+                },
+                "status": "error"
+            }
 
         opaque_keys = []
         for problem_info in items:
