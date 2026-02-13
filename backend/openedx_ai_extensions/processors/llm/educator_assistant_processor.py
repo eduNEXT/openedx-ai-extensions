@@ -8,7 +8,7 @@ from pathlib import Path
 
 from litellm import completion
 
-from openedx_ai_extensions.error_handler import get_error_info
+from openedx_ai_extensions.contract_handler import get_error_info, get_success_response
 from openedx_ai_extensions.processors.llm.litellm_base_processor import LitellmProcessor
 from openedx_ai_extensions.processors.llm.providers import adapt_to_provider
 
@@ -57,12 +57,14 @@ class EducatorAssistantProcessor(LitellmProcessor):
             response = completion(**completion_params)
             content = response.choices[0].message.content
 
-            return {
-                "response": content,
-                "tokens_used": response.usage.total_tokens if response.usage else 0,
-                "model_used": self.extra_params.get("model", "unknown"),
-                "status": "success",
-            }
+            return get_success_response(
+                code="SUCCESS",
+                response=content,
+                metadata={
+                    "tokens_used": response.usage.total_tokens if response.usage else 0,
+                    "model_used": self.extra_params.get("model", "unknown"),
+                }
+            )
 
         except Exception as e:  # pylint: disable=broad-exception-caught
             code, message, _ = get_error_info(e)
@@ -129,9 +131,11 @@ class EducatorAssistantProcessor(LitellmProcessor):
                         "model_used": self.extra_params.get("model", "unknown"),
                     }
 
-        return {
-            "response": response,
-            "tokens_used": tokens_used,
-            "model_used": self.extra_params.get("model", "unknown"),
-            "status": "success",
-        }
+        return get_success_response(
+            code="QUIZ_GENERATED",
+            response=response,
+            metadata={
+                "tokens_used": tokens_used,
+                "model_used": self.extra_params.get("model", "unknown"),
+            }
+        )

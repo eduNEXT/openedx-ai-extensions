@@ -8,7 +8,7 @@ import logging
 from django.conf import settings
 from submissions import api as submissions_api
 
-from openedx_ai_extensions.error_handler import get_error_info
+from openedx_ai_extensions.contract_handler import get_error_info, get_success_response
 
 logger = logging.getLogger(__name__)
 
@@ -146,6 +146,7 @@ class SubmissionProcessor:
                         },
                     }
                 ),
+                "status": "success"
             }
         else:
             return {

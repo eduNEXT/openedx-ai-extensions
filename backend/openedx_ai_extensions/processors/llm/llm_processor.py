@@ -7,7 +7,7 @@ import logging
 
 from litellm import completion, responses
 
-from openedx_ai_extensions.error_handler import get_error_info
+from openedx_ai_extensions.contract_handler import get_error_info, get_success_response
 from openedx_ai_extensions.functions.decorators import AVAILABLE_TOOLS
 from openedx_ai_extensions.processors.llm.litellm_base_processor import LitellmProcessor
 from openedx_ai_extensions.processors.llm.providers import adapt_to_provider, after_tool_call_adaptations
@@ -51,8 +51,8 @@ class LLMProcessor(LitellmProcessor):
 
         except Exception as e:  # pylint: disable=broad-exception-caught
             code, message, _ = get_error_info(e)
-            logger.exception("🤖 [LLM STREAM] TECHNICAL ERROR [%s]: %s", code, str(e))
-            yield f"\n[AI Service Error: {message}]".encode("utf-8")
+            logger.exception("🤖 [LLM STREAM] ERROR [%s]: %s", code, str(e), exc_info=True)
+            yield f"\n[AI Error: {message}]".encode("utf-8")
             return
 
         # Log tokens at end
@@ -67,12 +67,14 @@ class LLMProcessor(LitellmProcessor):
         total_tokens = response.usage.total_tokens if response.usage else 0
         logger.info(f"[LLM NON-STREAM] Tokens used: {total_tokens}")
 
-        return {
-            "response": content,
-            "tokens_used": total_tokens,
-            "model_used": self.provider,
-            "status": "success",
-        }
+        return get_success_response(
+            code="SUCCESS",
+            response=content,
+            metadata={
+                "tokens_used": total_tokens,
+                "model_used": self.provider,
+            }
+        )
 
     def _extract_response_content(self, response):
         """Extract text content from LiteLLM response."""
@@ -155,8 +157,8 @@ class LLMProcessor(LitellmProcessor):
 
         except Exception as e:  # pylint: disable=broad-exception-caught
             code, message, _ = get_error_info(e)
-            logger.exception("🤖 [LLM THREADED STREAM] TECHNICAL ERROR [%s]: %s", code, str(e))
-            yield f"\n[AI Service Error: {message}]"
+            logger.exception("🤖 [LLM THREADED STREAM] ERROR [%s]: %s", code, str(e), exc_info=True)
+            yield f"\n[AI Error: {message}]"
 
     def _call_responses_wrapper(self, params, initialize=False):
         """
@@ -178,21 +180,24 @@ class LLMProcessor(LitellmProcessor):
             total_tokens = response.usage.total_tokens if response.usage else 0
             logger.info(f"[LLM NON-STREAM] Tokens used: {total_tokens}")
 
-            result = {
-                "response": content,
+            # Include system messages when initializing a new thread
+            metadata = {
                 "tokens_used": total_tokens,
                 "model_used": self.extra_params.get("model", "unknown"),
-                "status": "success",
             }
-            # Include system messages when initializing a new thread
             if initialize:
                 system_msgs = [msg for msg in params.get("input", []) if "role" in msg and msg["role"] == "system"]
-                result["system_messages"] = system_msgs
-            return result
+                metadata["system_messages"] = system_msgs
+
+            return get_success_response(
+                code="SUCCESS",
+                response=content,
+                metadata=metadata
+            )
 
         except Exception as e:  # pylint: disable=broad-exception-caught
             code, message, _ = get_error_info(e)
-            logger.exception("🤖 [LLM RESPONSES] TECHNICAL ERROR [%s]: %s", code, str(e))
+            logger.exception("🤖 [LLM RESPONSES] ERROR [%s]: %s", code, str(e), exc_info=True)
             return {
                 "error": {
                     "code": code,
@@ -246,7 +251,7 @@ class LLMProcessor(LitellmProcessor):
 
         except Exception as e:  # pylint: disable=broad-exception-caught
             code, message, _ = get_error_info(e)
-            logger.exception("🤖 [LLM COMPLETION] TECHNICAL ERROR [%s]: %s", code, str(e))
+            logger.exception("🤖 [LLM COMPLETION] ERROR [%s]: %s", code, str(e), exc_info=True)
             return {
                 "error": {
                     "code": code,

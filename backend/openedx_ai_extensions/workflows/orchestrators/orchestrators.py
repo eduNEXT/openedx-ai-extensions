@@ -12,7 +12,7 @@ from openedx_ai_extensions.processors import (
     LLMProcessor,
     OpenEdXProcessor,
 )
-from openedx_ai_extensions.error_handler import get_error_info
+from openedx_ai_extensions.contract_handler import get_error_info, get_success_response
 from openedx_ai_extensions.utils import is_generator
 from openedx_ai_extensions.xapi.constants import (
     EVENT_NAME_WORKFLOW_COMPLETED,
@@ -36,10 +36,10 @@ class MockResponse(BaseOrchestrator):
         # Emit completed event for one-shot workflow
         self._emit_workflow_event(EVENT_NAME_WORKFLOW_COMPLETED)
 
-        return {
-            "response": f"Mock response for {self.workflow.action} at {time.strftime('%Y-%m-%d %H:%M:%S')}",
-            "status": "completed",
-        }
+        return get_success_response(
+            code="SUCCESS",
+            response=f"Mock response for {self.workflow.action} at {time.strftime('%Y-%m-%d %H:%M:%S')}"
+        )
 
 
 class MockStreamResponse(BaseOrchestrator):
@@ -118,17 +118,39 @@ class DirectLLMResponse(BaseOrchestrator):
         # 6. Emit completed event for one-shot workflow
         self._emit_workflow_event(EVENT_NAME_WORKFLOW_COMPLETED)
 
-        # --- 7. Return Structured Non-Streaming Result ---
-        # If execution reaches this point, we have a successful, non-streaming result (Dict).
-        response_data = {
-            'response': llm_result.get('response', 'No response available'),
-            'status': 'completed',
-            'metadata': {
-                'tokens_used': llm_result.get('tokens_used'),
-                'model_used': llm_result.get('model_used')
-            }
-        }
-        return response_data
+        # --- 7. Return Multi-Level Structured Result ---
+        return get_success_response(
+            code="SUCCESS",
+            response=llm_result.get("data", {}).get("response") if isinstance(llm_result, dict) and "data" in llm_result else llm_result.get("response", "No response available"),
+            metadata=llm_result.get("metadata", {})
+        )
+
+
+class SessionBasedOrchestrator(BaseOrchestrator):
+    """Orchestrator that provides session-based LLM responses."""
+
+    def __init__(self, workflow, user, context):
+        from openedx_ai_extensions.workflows.models import AIWorkflowSession  # pylint: disable=import-outside-toplevel
+
+        super().__init__(workflow, user, context)
+        self.session, _ = AIWorkflowSession.objects.get_or_create(
+            user=self.user,
+            scope=self.workflow,
+            profile=self.workflow.profile,
+            defaults={},
+        )
+
+    def clear_session(self, _):
+        self.session.delete()
+        return get_success_response(code="SESSION_CLEARED", response="")
+
+    def _get_submission_processor(self):
+        return SubmissionProcessor(
+            self.profile.processor_config, self.session
+        )
+
+    def run(self, input_data):
+        raise NotImplementedError("Subclasses must implement run method")
 
 
 class EducatorAssistantOrchestrator(SessionBasedOrchestrator):
@@ -138,12 +160,10 @@ class EducatorAssistantOrchestrator(SessionBasedOrchestrator):
     Generates quiz questions and stores them in content libraries.
     """
 
-    def get_current_session_response(self, _):
-        """Retrieve the current session's LLM response."""
         metadata = self.session.metadata or {}
         if metadata and "collection_url" in metadata:
-            return {"response": metadata["collection_url"]}
-        return {"response": None}
+            return get_success_response(code="SUCCESS", response=metadata["collection_url"])
+        return get_success_response(code="SUCCESS", response=None)
 
     def run(self, input_data):
         # 1. Process with OpenEdX processor
@@ -178,10 +198,13 @@ class EducatorAssistantOrchestrator(SessionBasedOrchestrator):
         )
 
         collection_key = library_processor.create_collection_and_add_items(
-            title=llm_result["response"].get("collection", "AI Generated Questions"),
+            title=llm_result.get("data", {}).get("response", {}).get("collection", "AI Generated Questions") if isinstance(llm_result, dict) and "data" in llm_result else llm_result.get("response", {}).get("collection", "AI Generated Questions"),
             description="AI-generated quiz questions",
-            items=llm_result["response"]["items"]
+            items=llm_result.get("data", {}).get("response", {}).get("items") if isinstance(llm_result, dict) and "data" in llm_result else llm_result.get("response", {}).get("items")
         )
+
+        if isinstance(collection_key, dict) and 'error' in collection_key:
+            return collection_key
 
         metadata = {
             "library_id": lib_key_str,
@@ -195,14 +218,74 @@ class EducatorAssistantOrchestrator(SessionBasedOrchestrator):
         self._emit_workflow_event(EVENT_NAME_WORKFLOW_COMPLETED)
 
         # 4. Return result
-        return {
-            'response': f"authoring/library/{lib_key_str}/collection/{collection_key}",
-            'status': 'completed',
-            'metadata': {
-                'tokens_used': llm_result.get('tokens_used'),
-                'model_used': llm_result.get('model_used')
+        return get_success_response(
+            code="QUIZ_GENERATED",
+            response=f"authoring/library/{lib_key_str}/collection/{collection_key}",
+            metadata={
+                "tokens_used": llm_result.get("metadata", {}).get("tokens_used") if isinstance(llm_result, dict) and "data" in llm_result else llm_result.get("tokens_used"),
+                "model_used": llm_result.get("metadata", {}).get("model_used") if isinstance(llm_result, dict) and "data" in llm_result else llm_result.get("model_used"),
             }
-        }
+        )
+
+    def run_async(self, input_data):
+        """
+        Launch async task to execute the run method.
+
+        Args:
+            input_data: Input data to pass to the run method
+        """
+
+        self.session.course_id = self.course_id
+        self.session.location_id = self.location_id
+        self.session.save()
+
+        task = _execute_orchestrator_async.delay(
+            session_id=self.session.id,
+            action='run',
+            params={
+                "input_data": input_data,
+            }
+        )
+
+        return get_success_response(
+            code="PROCESSING",
+            response="AI workflow has started",
+            metadata={"task_id": task.id}
+        )
+
+    def get_run_status(self, input_data):  # pylint: disable=unused-argument
+        """
+        Get the status of an async task from session metadata.
+
+        Returns:
+            dict: Status information including task result if completed
+        """
+        metadata = self.session.metadata or {}
+        task_status = metadata.get('task_status', 'processing')
+
+        if task_status == 'completed':
+            result = metadata.get('task_result')
+            if result:
+                return result
+            return get_success_response(
+                code="SUCCESS",
+                response="Task completed but no result found"
+            )
+        elif task_status == 'error':
+            return {
+                'status': 'error',
+                'error': metadata.get('task_error', 'Unknown error occurred')
+            }
+        elif task_status == 'timeout':
+            return {
+                'status': 'timeout',
+                'error': metadata.get('task_error', 'Task exceeded time limit')
+            }
+        else:
+            return get_success_response(
+                code="PROCESSING",
+                response="AI workflow is running"
+            )
 
 
 class ThreadedLLMResponse(SessionBasedOrchestrator):
@@ -239,10 +322,10 @@ class ThreadedLLMResponse(SessionBasedOrchestrator):
                 "status": "error",
             }
 
-        return {
-            "response": result.get("response", "{}"),
-            "status": "completed",
-        }
+        return get_success_response(
+            code="SUCCESS",
+            response=result.get("data", {}).get("response") if isinstance(result, dict) and "data" in result else result.get("response", "{}"),
+        )
 
     def _stream_and_save_history(self, generator, input_data,  # pylint: disable=too-many-positional-arguments
                                  submission_processor, llm_processor,
@@ -309,10 +392,10 @@ class ThreadedLLMResponse(SessionBasedOrchestrator):
                     "error": history_result["error"],
                     "status": "error",
                 }
-            return {
-                "response": history_result.get("response", "No response available"),
-                "status": "completed",
-            }
+            return get_success_response(
+                code="SUCCESS",
+                response=history_result.get("data", {}).get("response") if isinstance(history_result, dict) and "data" in history_result else history_result.get("response", "No response available"),
+            )
 
         # 2. else process with OpenEdX processor
         openedx_processor = OpenEdXProcessor(
@@ -379,11 +462,11 @@ class ThreadedLLMResponse(SessionBasedOrchestrator):
             self._emit_workflow_event(EVENT_NAME_WORKFLOW_INTERACTED)
 
         # 4. Return result
-        return {
-            "response": llm_result.get("response", "No response available"),
-            "status": "completed",
-            "metadata": {
+        return get_success_response(
+            code="SUCCESS",
+            response=llm_result.get("data", {}).get("response") if isinstance(llm_result, dict) and "data" in llm_result else llm_result.get("response", "No response available"),
+            metadata=llm_result.get("metadata", {}) if isinstance(llm_result, dict) and "metadata" in llm_result else {
                 "tokens_used": llm_result.get("tokens_used"),
                 "model_used": llm_result.get("model_used"),
             },
-        }
+        )

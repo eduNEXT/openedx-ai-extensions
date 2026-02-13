@@ -15,7 +15,7 @@ from openedx_ai_extensions.processors.openedx.utils.component_extractors import 
     extract_generic_info,
     extract_problem_info,
 )
-from openedx_ai_extensions.error_handler import get_error_info
+from openedx_ai_extensions.contract_handler import get_error_info
 
 logger = logging.getLogger(__name__)
 

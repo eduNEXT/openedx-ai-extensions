@@ -134,7 +134,12 @@ export const callWorkflowService = async ({
     if (isJson) {
       try {
         const jsonResult = JSON.parse(fullAccumulatedText);
-        if (response.status >= 400) { throw new Error(jsonResult.error || 'AI Service Error'); }
+        if (response.status >= 400) {
+          if (jsonResult.error) {
+            throw jsonResult.error;
+          }
+          throw new Error('AI Service Error');
+        }
         return camelCaseObject(jsonResult) as WorkflowServiceResult;
       } catch (e: any) {
         if (e && e.message && e.message !== 'Unexpected end of JSON input') { throw e; }

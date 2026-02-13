@@ -98,12 +98,25 @@ export const getDefaultEndpoint = (endpoint: EndpointType = ENDPOINT_TYPES.WORKF
  * @param error - Error object or string
  * @returns User-friendly error message
  */
-export const formatErrorMessage = (error: Error | any): string => {
+export const formatErrorMessage = (error: any): string => {
+  // If error is an object with a message (like our new backend contract)
+  if (error && typeof error === 'object') {
+    if (error.message && typeof error.message === 'string') {
+      return error.message;
+    }
+    // Handle the case where the error object itself has the message (e.g. from the backend)
+    if (error.error && typeof error.error === 'object' && error.error.message) {
+      return error.error.message;
+    }
+  }
+
   const errorMessage = (error && error.message) ? String(error.message) : String(error || 'Unknown error occurred');
+
   if (errorMessage.includes('fetch')) { return 'Unable to connect to AI service. Please check your connection.'; }
   if (errorMessage.includes('404')) { return 'AI service not available. Please contact support.'; }
   if (errorMessage.includes('500')) { return 'AI service temporarily unavailable. Please try again later.'; }
   if (errorMessage.includes('timeout')) { return 'Request timed out. The AI service may be busy, please try again.'; }
+
   return 'Failed to get AI assistance. Please try again.';
 };
 

@@ -7,7 +7,7 @@ from uuid import uuid4
 from opaque_keys.edx.locator import LibraryLocatorV2
 
 from openedx_ai_extensions.edxapp_wrapper.content_libraries_module import get_content_libraries
-from openedx_ai_extensions.error_handler import get_error_info
+from openedx_ai_extensions.contract_handler import get_error_info
 
 logger = logging.getLogger(__name__)
 

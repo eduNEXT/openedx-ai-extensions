@@ -4,6 +4,7 @@ Refactored to use Django models and workflow orchestrators
 """
 
 import json
+import litellm
 import logging
 from datetime import datetime
 
@@ -12,6 +13,7 @@ from django.core.exceptions import ValidationError
 from django.http import JsonResponse, StreamingHttpResponse
 from django.utils.decorators import method_decorator
 from django.views import View
+
 from opaque_keys import InvalidKeyError
 from opaque_keys.edx.keys import CourseKey, UsageKey
 from rest_framework import status
@@ -22,8 +24,7 @@ from rest_framework.views import APIView
 from openedx_ai_extensions.utils import is_generator
 from openedx_ai_extensions.workflows.models import AIWorkflowScope
 
-from openedx_ai_extensions.error_handler import get_error_info
-from openedx_ai_extensions.error_handler import get_error_info
+from openedx_ai_extensions.contract_handler import get_error_info
 from .serializers import AIWorkflowProfileSerializer
 
 logger = logging.getLogger(__name__)
@@ -82,7 +83,6 @@ class AIGenericWorkflowView(View):
 
     def post(self, request):
         """Common handler for GET and POST requests"""
-
         try:
             context = get_context_from_request(request)
             workflow_profile = AIWorkflowScope.get_profile(**context)
@@ -107,6 +107,7 @@ class AIGenericWorkflowView(View):
                 )
 
             status_code_map = {
+                "success": 200,
                 "error": 500,
                 "validation_error": 400,
                 "bad_request": 400,
@@ -116,16 +117,17 @@ class AIGenericWorkflowView(View):
                 status=status_code_map.get(result.get("status"), 200)
             )
 
-        except Exception as e:  # pylint: disable=broad-exception-caught
-            # Map exception to safe user message and status code
+        except (litellm.exceptions.LiteLLMException, Exception) as e:
+            # Categorize the error
             code, message, http_status = get_error_info(e)
 
-            # Operator Logging: Log full traceback for technical errors (500s)
+            # Log for operators (with full traceback)
             if http_status >= 500:
-                logger.exception("🤖 AI_WORKFLOW [%s] TECHNICAL ERROR: %s", code, str(e))
+                logger.exception("🤖 WORKFLOW [%s] ERROR: %s", code, str(e), exc_info=True)
             else:
-                logger.warning("🤖 AI_WORKFLOW [%s] CLIENT WARNING: %s", code, str(e))
+                logger.warning("🤖 WORKFLOW [%s] WARNING: %s", code, str(e))
 
+            # Response for final users
             return JsonResponse(
                 {
                     "error": {
