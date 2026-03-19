@@ -183,5 +183,8 @@ setup(
         "cms.djangoapp": [
             "openedx_ai_extensions = openedx_ai_extensions.apps:OpenedxAIExtensionsConfig",
         ],
+        "openedx.xblock_service": [
+            "ai_extensions = openedx_ai_extensions.xblock_service:ai_extensions_factory",
+        ],
     },
 )
