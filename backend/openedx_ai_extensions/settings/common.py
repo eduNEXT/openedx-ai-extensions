@@ -56,6 +56,18 @@ def plugin_settings(settings):
     )
 
     # -------------------------
+    # XBlock service registration
+    # -------------------------
+    # Register the "ai_extensions" XBlock service via XBLOCK_EXTRA_SERVICES.
+    # This allows XBlocks to access AI capabilities through the standard
+    # self.runtime.service(self, "ai_extensions") mechanism.
+    if not hasattr(settings, "XBLOCK_EXTRA_SERVICES"):
+        settings.XBLOCK_EXTRA_SERVICES = {}
+    settings.XBLOCK_EXTRA_SERVICES["ai_extensions"] = (
+        "openedx_ai_extensions.xblock_service.mixin.ai_extensions_service_factory"
+    )
+
+    # -------------------------
     # Settings based config router
     # -------------------------
 

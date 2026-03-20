@@ -3,7 +3,8 @@ XBlock service for AI Extensions.
 
 Exposes the ``"ai_extensions"`` service so that XBlocks can make LLM calls
 without importing Django models directly.  Service registration is handled
-automatically via ``OpenedxAIExtensionsConfig.ready()``.
+via the ``XBLOCK_EXTRA_SERVICES`` setting in ``settings/common.py``, which
+points to the factory callable in ``mixin.py``.
 
 Usage (XBlock side)::
 

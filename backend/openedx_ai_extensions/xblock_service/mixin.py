@@ -1,79 +1,37 @@
 """
-Runtime patching for the ``"ai_extensions"`` XBlock service.
+Factory callable for the ``"ai_extensions"`` XBlock service.
 
-``patch_runtime()`` is called once from ``OpenedxAIExtensionsConfig.ready()``.
-It monkey-patches ``xblock.runtime.Runtime.service`` so that every runtime
-subclass (LMS ``LmsModuleSystem``, CMS ``ModuleSystem``, modern
-``XBlockRuntime``, XBlock SDK ``WorkbenchRuntime``, …) automatically
-provides the ``"ai_extensions"`` service without any changes to edx-platform.
+Registered via ``XBLOCK_EXTRA_SERVICES`` in the plugin settings so that
+edx-platform's ``XBlockRuntime.service()`` can instantiate the service
+without any monkey-patching.
 
-The patch is:
+The factory signature expected by edx-platform is::
 
-* **Idempotent** — calling ``patch_runtime()`` more than once is safe.
-* **Non-breaking** — only the ``"ai_extensions"`` name is intercepted;
-  every other service name is forwarded to the original implementation.
-* **Graceful** — if building the service fails for any reason, ``None``
-  is returned, honouring the ``@XBlock.wants`` contract.
+    factory(block=<XBlock>, runtime=<XBlockRuntime>) -> service_instance
 """
 
 import logging
 
+from openedx_ai_extensions.xblock_service.service import AIExtensionsXBlockService
+
 logger = logging.getLogger(__name__)
 
-_PATCHED = False  # module-level guard for idempotency
 
-
-def patch_runtime():
+def ai_extensions_service_factory(*, block, runtime):
     """
-    Patch ``xblock.runtime.Runtime.service`` to inject the
-    ``"ai_extensions"`` service into every XBlock runtime instance.
+    Build an :class:`AIExtensionsXBlockService` from the XBlock runtime context.
 
-    ``XBLOCK_MIXINS`` mixes classes into XBlock *classes*, not runtimes, so
-    it cannot be used to register runtime services.  Patching the base
-    ``Runtime`` class directly is the only plugin-safe approach that works
-    across all Open edX runtime variants (legacy ModuleSystem, modern
-    XBlockRuntime, XBlock SDK WorkbenchRuntime).
+    Called by ``XBlockRuntime.service()`` when ``service_name`` matches an entry
+    in ``settings.XBLOCK_EXTRA_SERVICES``.
 
-    Safe to call multiple times.
+    Args:
+        block: The XBlock instance requesting the service.
+        runtime: The ``XBlockRuntime`` instance.
+
+    Returns:
+        An ``AIExtensionsXBlockService`` instance, or ``None`` on error
+        (honouring the ``@XBlock.wants`` contract).
     """
-    global _PATCHED  # pylint: disable=global-statement
-    if _PATCHED:
-        return
-
-    try:
-        import xblock.runtime as xblock_runtime  # noqa: PLC0415  pylint: disable=import-outside-toplevel,import-error
-
-        original_service = xblock_runtime.Runtime.service
-
-        def _patched_service(runtime_self, block, service_name):
-            if service_name == "ai_extensions":
-                return _build_service(runtime_self, block)
-            return original_service(runtime_self, block, service_name)
-
-        xblock_runtime.Runtime.service = _patched_service
-        _PATCHED = True
-        logger.info(
-            "openedx_ai_extensions: patched xblock.runtime.Runtime.service "
-            "to provide the 'ai_extensions' XBlock service."
-        )
-    except Exception:  # pylint: disable=broad-exception-caught
-        logger.exception(
-            "openedx_ai_extensions: failed to patch XBlock runtime — "
-            "the 'ai_extensions' service will not be available to XBlocks."
-        )
-
-
-def _build_service(runtime, block):
-    """
-    Construct an :class:`~openedx_ai_extensions.xblock_service.service.AIExtensionsXBlockService`
-    from the current *runtime* and *block* context.
-
-    Returns ``None`` on any error so the ``@XBlock.wants`` contract is upheld.
-    """
-    from openedx_ai_extensions.xblock_service.service import (  # noqa: PLC0415  pylint: disable=import-outside-toplevel
-        AIExtensionsXBlockService,
-    )
-
     try:
         user = _get_user(runtime)
         course_id = _get_course_id(block)
@@ -94,8 +52,7 @@ def _build_service(runtime, block):
 
 
 # ---------------------------------------------------------------------------
-# Context extractors — work across both legacy ModuleSystem and modern
-# XBlockRuntime, failing safely if neither shape is present.
+# Context extractors
 # ---------------------------------------------------------------------------
 
 def _get_user(runtime):
@@ -121,7 +78,7 @@ def _get_user(runtime):
                 pass
 
         try:
-            from django.contrib.auth import get_user_model  # noqa: PLC0415  pylint: disable=import-outside-toplevel
+            from django.contrib.auth import get_user_model  # pylint: disable=import-outside-toplevel
             return get_user_model().objects.get(pk=user_id)
         except Exception:  # pylint: disable=broad-exception-caught
             pass

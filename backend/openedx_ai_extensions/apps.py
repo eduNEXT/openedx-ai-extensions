@@ -37,11 +37,6 @@ class OpenedxAIExtensionsConfig(AppConfig):
         from openedx_ai_extensions import tasks  # noqa: F401 pylint: disable=unused-import,import-outside-toplevel
         from openedx_ai_extensions.xapi import \
             transformers  # noqa: F401 pylint: disable=unused-import,import-outside-toplevel
-        # Register the "ai_extensions" XBlock service with every known Open edX
-        # XBlock runtime class.  We patch at the class level so every instance
-        # created after app startup automatically provides the service.
-        from openedx_ai_extensions.xblock_service.mixin import patch_runtime  # pylint: disable=import-outside-toplevel
-        patch_runtime()
 
         self._configure_llm_cache()
 
