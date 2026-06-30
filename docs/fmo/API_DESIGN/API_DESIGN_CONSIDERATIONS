@@ -1,0 +1,225 @@
+Diseño de api.py para openedx-ai-extensions
+---
+
+
+
+1.¿Cuál es el vocabulario mínimo de verbos que cubre los consumidores?
+
+    pregunta al pie: ¿Qué diferencias son reales (chat es stateful + streaming; grading es estructurado + alto riesgo + idempotente) y cuáles son incidentales y pueden colapsar en un solo verbo
+
+Usos reales:
+
+Badges
+    OpenEdXProcessor: lo importa para poder obtener todo el contexto del curso en _get_course_context
+    AIWorkflowSession: lo trae para get_or_create una "Course-scoped session"
+    BaseOrchestrator as _BaseOrchestrator -> lo necesita en el init
+    SessionBasedOrchestrator -> lo toma de clase base
+    _execute_orchestrator_async : _execute_orchestrator_async.delay(session_id, action='generate_image', params={})
+
+
+
+ai-coach
+
+    context = String(
+        display_name=_('Context'),
+        default="""
+        Evaluate my response to the question below:
+        Question: {{question}}
+        My Answer: {{answer}}
+        Provide detailed feedback that includes:
+        - An assessment of correctness.
+        - Clear guidance on how to improve the answer, if needed.
+        """,
+        scope=Scope.settings,
+        multiline_editor=True,
+        help=_("Write the question context here"),
+    )
+
+    student_answer = data['answer'].strip()
+    prompt = self.context.replace('{{question}}', f'"{self.question}"')
+    prompt = prompt.replace('{{answer}}', f'"{student_answer}"')
+
+    messages = [{"role": "user", "content": prompt}]
+    response = client.chat.completions.create(
+        messages=messages,
+        model=model,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        n=n
+    )
+
+
+xblock-ai-evaluation
+    messages = [
+        {
+            "role": "system",
+            "content": f"""
+           {self.evaluation_prompt}
+
+           {self.question}.
+
+           The programmimg language is {self.language}
+
+           Evaluation must be in Makrdown format.
+           """,
+        },
+        {
+            "content": f""" Here is the student's answer:
+          {answer}
+            """,
+            "role": "user",
+        },
+    ]
+
+    if api_base:
+    kwargs["api_base"] = api_base
+    return (
+        completion(model=model, api_key=api_key, messages=messages, **kwargs)
+        .choices[0]
+        .message.content
+    )
+
+
+
+ORA grading
+
+
+    messages = [
+        {"role": "system", "content":f"Instructor enters the following prompt for the ChatGPT: {ai_prompt}"},
+        {"role": "system", "content":f"The question to the student is: {question}."},
+        {"role": "system", "content":f"The rubric for grading student's response: {prompts}."},
+        {"role": "system", "content":f"Please select the most suited rubric number, and include phrase RUBRIC_OPTION_IS: rubric number, also please follow the prompt {ai_prompt}"},
+        {"role": "user", "content":f"My answer is: {answer}."},
+    ]
+
+    openai.api_key = get_openai_key()
+    if openai.api_key:
+        if not messages:
+            messages = [{"role": "user", "content": question}]
+
+        completion = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=messages,
+            max_tokens=1000,
+            stop=["    "],
+            temperature=0.7,
+        )
+        return completion.choices[0].message["content"]
+
+
+
+
+
+Problemas identificados
+ - a veces se necesita una clase base para poder hacer un orchestrator custom
+ - los modelos que quedan hardcoded se aviejan (y rápido). Algunos ya no estan disponibles en el provider
+ - no hay valvulas efectivas para apagar toda la funcionalidad (ni de forma granular) más allá de borrar el componente.
+ - no hay control del Prompt unificado. En la mayoría de casos no hay ningun control
+ - 1/3 tiene router para permitir más modelos
+ - No hay record local del trabajo realizado por el estudiante
+ - falta HITL para las calificaciones en ai-ora2
+
+
+Contrato de capacidades??
+
+    - Correr un completion:
+        - un profile definido por código (con overrides posibles en la DB)
+    - Correr una sequencia de mensajes
+    - Crear/Leer/AlmacenarInfo en una sesión
+
+
+
+
+familia de verbos. e.g: run(...) / evaluate(...) / chat(...)
+
+
+
+2. Que verbos voy a proponer
+
+    Un verbo principal y sintactic sugar para hacerlo más facil de llamar
+
+
+
+
+3. ¿quién elige el profile? 
+    
+    Resuelto por scope -> siempre, pero con un default explicito? capacidad de sobreescribir
+
+    ¿Dónde vive la autoridad final: en el autor que escribe el consumidor o en el operador que corre la plataforma?
+        El operador tiene que tener esto.
+
+
+
+4.  El contrato de disponibilidad 
+    - ¿Está instalado?  -> esta pregunta no importa, solo que no salten excepciones
+    - ¿Está usable ahora? -> sí, nunca, ahora mismo no
+
+
+
+
+5. Resultado: que retorna?
+
+    Valor de retorno, task handle + poll, o callback/evento/signal?
+        El API expone variantes (run vs run_async)?
+
+        creo que o retorna la respuesta
+        o un objeto wrapper que facilmente contiene la respuesta (Que retorna Litellm?)
+        todos los consumidores ahora mismo, solo se preocupan por la respuesta
+
+
+    Si ORA reintenta, no debe calificar dos veces. Puedo garantizar eso? guardar en sesion y retornar. Ofrecer un force?
+
+    Output uniforme: status (ok / unavailable / pending / error), payload, metadata (modelo usado, tokens, costo, session_id), y para evaluación un payload estructurado (score por criterio).
+
+    Nunca devuelvas texto crudo del LLM sin status ni metadata?
+    que hacer con streaming?
+
+
+6. Context y Actor como objetos de valor de primera clase (y no-XBlock)
+    || Many things want to use this framework (xblocks, forums, plugins, courseware)
+
+
+    Necesitas un Context plano y serializable (course_id, usage_id/location, placement_id, extras) 
+    - que hace openedx-core? (https://github.com/openedx/openedx-core/)
+
+7. Sesiones, auditoría, human-in-the-loop y supervisión
+    - Para grading de alto riesgo: ¿el API soporta retener un resultado como "pending human approval" y recuperarlo/aprobarlo después? ¿O eso es responsabilidad del consumidor?
+
+    creo que eso es responsabilidad de una API en el futuro
+
+    Versioned API? que hace openedx-core?
+
+
+8. ¿Quién escribe los profiles?
+    EL dev los debe poder escribir, pero luego el operador debe poder 
+
+
+9. Estabilidad y versionado
+    - api.py es la única superficie soportada
+    - como debería cambiar badges?
+
+    - El api.py del base es total: siempre importable, nunca lanza excepciones por ausencia, siempre devuelve un status tipado
+
+    - Service y import son adaptadores delgados sobre el mismo api.py
+
+hoja de "contrato de capacidades"?
+
+
+
+Things to consider:
+
+1. typing_extensions.deprecated on model attributes @deprecated("Explain what")
+
+
+
+
+
+
+Goals:
+
+- A stable library definition with the necessary classes, abstractions, concepts and models.
+- an optional implementation library that contains the routing library (litellm) to keep it out of the core
+- responses to all the considerations in this file
+- a good versioning mechanism of otherwise a backwards compatibility policy
+
+
