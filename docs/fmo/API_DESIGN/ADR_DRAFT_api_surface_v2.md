@@ -11,7 +11,13 @@ xblock-ai-evaluation, ORA, badges — and more places will (forum, courseware,
 other plugins). Today each wires its own provider call, prompt handling,
 storage, and error shapes. And the handful of existing "AI XBlocks" that do this
 are built on obsolete models and can, at best, tweak a prompt — nothing beyond
-it. #::: This already is the main goal of what the OpenEDX-AI-extensions project is built for. However, that project in its first steps what it did was create new surfaces and integrations that were new to the workings of the platform. Now let's call this a second or third phase. What we're doing is trying to connect the capabilities provided by the extensions framework, into existing platform code (forum, xblocks, plugins, ...).
+it.
+
+This is a new phase of `openedx-ai-extensions`. The project's first phase built
+*new* AI surfaces and integrations for the platform. This phase is about
+**connecting the capabilities that framework already provides into existing
+platform code** — the forum, XBlocks, and other plugins — rather than adding
+more new surfaces.
 
 Two distinct questions have emerged, and conflating them muddies both. This ADR
 treats them as **two separate decisions**:
@@ -79,7 +85,9 @@ ORM shape, so the same API works from a request, a task, or a block.
 **A5. Evolve the existing framework, don't rewrite it.**
 The surface sits *on top of* what already exists (profiles, scope resolution,
 orchestrators, sessions), adding the minimum net-new. Grounding in what's there
-is a goal, not an accident. #::: A side effect of this is that we might need to rework the internals of the existing REST API to better match what the API is exposing. But that is normal evolution. It should be a consequence that we can put in an ATR and live fight with it.
+is a goal, not an accident. A side effect we accept: the internals of the
+existing REST API may need reworking to match what this surface exposes — normal
+evolution, recorded as a consequence rather than avoided.
 
 **A6. Make writing orchestrators and processors easy.**
 Much of what consumers want may be achievable through a prompt alone — but when
@@ -128,10 +136,15 @@ The arguments for keeping that weight separable:
   independently, faster than the release rhythm of edx-platform's own
   dependencies.
 - For anyone not using AI, carrying the router makes no sense at all.
+- Keeping the router separable is also part of an ongoing effort to keep
+  **dependency hell** out of the platform — an effort this decision stays in
+  line with rather than solves outright.
 
-#::: One goal that I think we're missing here is the ability to test code without having to install like the whole router and AI experience, but being able to know what the API should return and being able to test the different versions for compatibility changes and whatnot, that is still important.
-
-#::: And yet another one that we are sort of touching on B one would be the trying to maintain the dependency hell out of this. That's an ongoing effort and there's always a lot of things to work this out, but we are trying to keep in line with it.
+**B3. Testable against the contract, without the engine.**
+A consumer — and we — should be able to test code against what the API is
+supposed to return, and to test versions for compatibility, **without installing
+the router and the whole AI stack**. The light package must carry enough of the
+contract (types, statuses, stubs) to test against on its own.
 
 ---
 
@@ -148,3 +161,84 @@ The arguments for keeping that weight separable:
 
 - **Operator authority can override developer intent** — accepted, because
   operator control is the goal, not a side effect.
+
+---
+
+# Forum reply draft — mapping this to the thread
+
+> *This section is written to be published in the discussion thread
+> ([Plugin-provided XBlock runtime services](https://discuss.openedx.org/t/plugin-provided-xblock-runtime-services/18682)),
+> not as part of the ADR proper. It ties the ADR back to the points raised there
+> and flags what's still open.*
+
+Thanks all — the discussion pushed us to separate two things that were tangled
+in our first draft: **what AI capability we expose** (an `api.py` surface) and
+**how it's delivered** (an extension point plus a light/heavy library split).
+The draft ADR is framed around exactly that split. Here's how it lines up with
+what was raised, and where we still owe work.
+
+### Points the ADR now takes a position on
+
+- **Dependency weight** (LiteLLM ≈ 210 MB, 56 packages, ~189 releases in a
+  year). We adopt the **two-library split** proposed here: a light package
+  carrying models, Open edX adaptors and a stable `api.py` with *no* router
+  dependency, and a separate package with the LLM router, processors and example
+  profiles. Installs that don't use AI don't pay for it, and the AI package can
+  follow the router's fast release cadence independently. (Decision B.)
+- **Configuration authority — author vs. admin.** We take a clear stand: the
+  **operator/administrator holds final authority** over model, prompt, and
+  on/off, per scope; developers ship good defaults that operators can override.
+  (Goal A3.)
+- **Audit trails for LLM responses.** A durable record is a default, and the
+  same path wires in xAPI, so analytics and Aspects light up without extra work.
+  (Goal A8.)
+- **Abstracting commercial LLMs / keys / streaming / prompt authoring.** All of
+  this sits behind the profile + engine, never in the caller's hands; exposing
+  the router/litellm layer is an explicit non-goal. (Goals A2/A7 + non-goals.)
+- **Contract clarity** (Braden's point that XBlock services lack documented,
+  enforced contracts). The contract *is* `api.py`: one supported import path,
+  shipped types, enforced module boundaries, and staged deprecation. (Goals A1 +
+  A9.) Note we are deliberately **not** trying to define a generic multi-vendor
+  service interface — there is one engine, so the contract is "our `api.py`," not
+  an ecosystem-wide spec.
+- **HITL / safety loops.** Acknowledged and deliberately deferred; the result
+  shape leaves room to add approval/review later. (Non-goals.)
+
+### Points the ADR only partially addresses (we owe more)
+
+- **"Installed" vs. "operationally available," and the many failure modes**
+  (Dave's point: config-disabled, no-LLM-configured, unavailable-to-this-user,
+  only-a-subset-enabled, transient outage). We give *typed* outcomes and a
+  side-effect-free pre-check, but the draft currently collapses these distinct
+  causes into a single `UNAVAILABLE`. **We should enumerate and surface them as a
+  small taxonomy** so consumers can tell "turned off here" from "temporarily
+  down" from "not for you."
+- **Kill-switch shape — `None` vs. an unavailable object.** In our model there
+  are two layers: when the plugin isn't installed, the runtime service is simply
+  `None` (standard `@XBlock.wants` degradation); when it *is* installed but
+  disabled or unconfigured, the call returns a **typed `UNAVAILABLE` result**.
+  We should state that two-layer answer explicitly.
+- **What exactly is the "stable API" contract** (versioning, backwards-compat
+  window). A9 states the intent; the concrete version scheme and deprecation
+  windows still need to be written down.
+
+### Points still open — flagged to work on
+
+- **Is the runtime-service delivery justified now, or deferred?** Braden's
+  suggestion to wait for a second implementation before designing a pluggable
+  service is fair. Our current position is that two *consumption paths* have
+  independent value — a runtime **service** for optional features (zero
+  dependency, degrade to `None`, e.g. ORA's AI grading) and a direct **import**
+  of the light package for core features — but Decision B stays at the goals
+  level and does not settle this. Worth deciding together.
+- **Delivery details.** Per-call vs. memoized instantiation, and entry-point
+  naming, are intentionally out of this goals-level ADR and belong in the
+  delivery design.
+- **Testability without the engine.** Being able to test against the API
+  contract and check version compatibility *without* installing the router is a
+  goal (B3); how the light package ships stubs/types to make that real is still
+  to be designed.
+
+We'd love feedback specifically on (a) the two-decision framing, (b) the
+failure-mode taxonomy, and (c) whether the service-delivery path is worth
+committing to now.
