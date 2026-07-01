@@ -223,3 +223,4 @@ Goals:
 - a good versioning mechanism of otherwise a backwards compatibility policy
 
 
+This is just a note, but it could eventually be developed into something more. The current contract that that JSON defines might still require refactoring. It made sense for the current use cases but now that the dust has settled, overriding the prompt and having more tools to override it starts to make more sense.
