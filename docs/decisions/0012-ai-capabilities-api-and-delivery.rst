@@ -1,4 +1,4 @@
-0012 AI Capabilities API and Its Delivery
+0012 API for AI extensions in python code
 #########################################
 
 Status
@@ -12,14 +12,15 @@ Several parts of the Open edX ecosystem already want to reach for AI: the AI
 coach, ``xblock-ai-evaluation``, ORA-style grading, and the badges plugin, with
 more to come in the forum, in courseware, and in other plugins. Today each of
 them wires its own provider call, prompt handling, storage, and error shapes.
-The handful of existing "AI XBlocks" that attempt this are built on obsolete
-models and can, at best, tweak a prompt — nothing beyond it.
+The handful of existing "AI XBlocks" that attempt this are written on frontier
+models and with time they are left behind. In terms of flexibility they in the
+best cases allow users to modify the prompt, nothing beyond it.
 
 This is a new phase for ``openedx-ai-extensions``. The project's first phase
 built *new* AI surfaces and integrations for the platform (see :doc:`0001-purpose-of-this-repo`).
 This phase is about **connecting the capabilities the framework already provides
-into existing platform code** — the forum, XBlocks, and other plugins — rather
-than adding more new surfaces of its own.
+into existing platform code**, reaching the forum, XBlocks, and other plugins,
+rather than adding more new surfaces of its own.
 
 Two distinct questions have emerged, and conflating them muddies both:
 
@@ -31,7 +32,7 @@ Two distinct questions have emerged, and conflating them muddies both:
 The second question is a direct continuation of :doc:`0005-xblock-ai-service-registration`,
 which surveyed ways to expose an ``"ai_extensions"`` XBlock runtime service,
 found that every viable option required upstream platform changes, and deferred
-the decision to a community discussion — now underway at
+the decision to a community discussion, now underway at
 `Plugin-provided XBlock runtime services <https://discuss.openedx.org/t/plugin-provided-xblock-runtime-services/18682>`_.
 This ADR records the goals for **both** questions so subsequent design and review
 can be measured against them, and so the community conversation has a concrete
@@ -47,12 +48,12 @@ move the ecosystem past the prompt-only AI XBlocks toward something extensible.
 Decision
 ********
 
-We will define and maintain a single public Python API — an ``api.py`` module —
+We will define and maintain a single public Python API, the ``api.py`` module,
 as the supported surface for AI capabilities, and we will deliver it through a
 light/heavy package split plus a low-coupling extension point. The specifics are
 recorded below as two separate decisions.
 
-Decision A — The API surface
+Decision A: The API surface
 ============================
 
 The ``api.py`` module is the one supported entry point. It exposes:
@@ -63,8 +64,8 @@ The ``api.py`` module is the one supported entry point. It exposes:
   reference;
 - a small set of plain, serializable **value objects** describing *where* and
   *for whom* a call happens;
-- a **profile** concept — good defaults declared in code, operator overrides
-  applied from the database;
+- a **profile** concept, with good defaults declared in code and operator
+  overrides applied from the database;
 - a side-effect-free **pre-check** to ask "is this usable here?" without running
   anything;
 - **streamlined session access** so consumers can read and write conversation
@@ -84,14 +85,14 @@ for every plugin that uses AI.
 A2. **Predictable, typed, schema-shaped results.** Callers never receive raw,
 unstatused LLM text or have to shape-sniff a dict. Every result states what
 happened, and the easy path ("just give me the text") stays easy. A consumer can
-hand us a schema and get a response guaranteed to match it; knowing the shape
+hand a schema and get a response guaranteed to match it; knowing the shape
 they will get back is a first-class ergonomic (streaming is the one case that
-needs its own treatment). Failure modes — not configured, not installed — are
+needs its own treatment). Failure modes such as not configured or not installed are
 acceptable as long as they are predictable and documented, so downstream code
 can plan for them rather than be surprised by an exception.
 
-A3. **Operator authority is structural.** The operator running the platform —
-not the developer writing the consumer — has final say over model and provider,
+A3. **Operator authority is structural.** The operator running the platform,
+not the developer writing the consumer, has final say over model and provider,
 prompt, and whether AI runs at all in a given scope. This is a concrete upgrade
 over the status quo, where the existing AI XBlocks expose little to no control
 beyond the prompt. Developers ship good defaults; operators override them.
@@ -101,14 +102,13 @@ serializable, and free of any XBlock or ORM shape, so the same API works from a
 web request, a Celery task, or a block.
 
 A5. **Evolve the existing framework, don't rewrite it.** The surface sits *on
-top of* the machinery that already exists — profiles, scope resolution,
-orchestrators, sessions (see :doc:`0002-dynamic-workflow-configuration` and
-:doc:`0004-submission-as-chat-storage`) — adding the minimum net-new. A side
-effect we accept: the internals of the existing REST API may need reworking to
-match what this surface exposes.
+top of* the machinery that already exists. Profiles, scope resolution,
+orchestrators, sessions and storing ai responses. It adds the minimum net-new.
+A side effect we accept: the internals of the existing REST API may need reworking
+to match what this surface exposes.
 
 A6. **Make writing orchestrators and processors easy.** Much of what consumers
-want may be achievable through a prompt alone — but when it is not, writing a
+want may be achievable through a prompt alone, but when it is not, writing a
 custom orchestrator or processor is a first-class, well-supported path, not a
 fight with the framework.
 
@@ -116,17 +116,16 @@ A7. **Define-and-call ergonomics.** A developer can declare a profile in code
 and run it immediately, with operator overrides applied transparently if they
 exist.
 
-A8. **A durable record — and analytics — for free.** Consumers get their AI
+A8. **A durable record and analytics for free.** Consumers get their AI
 interactions persisted without writing storage code, and without the result type
 being entangled with how storage happens. The same default wires in xAPI, so
 analytics and the Aspects platform light up out of the box.
 
 A9. **Long-term supportability by design.** The surface adopts standard
-longevity practices — explicit public exports, shipped type information, enforced
-module boundaries, and staged deprecation — so keeping faith with consumers over
-years is cheap rather than heroic.
+longevity practices like explicit public exports, shipped type information, enforced
+module boundaries, and staged deprecation.
 
-Decision B — The delivery mechanism
+Decision B: The delivery mechanism
 ===================================
 
 How the API reaches consumers in code is a separate decision from what it
@@ -134,7 +133,7 @@ exposes. We commit to the following goals; the concrete mechanism is designed
 against them and refined with the community discussion.
 
 B1. **A natural, low-coupling extension point.** Consumers reach the API without
-importing framework internals or coupling to its release cycle — a clean seam
+importing framework internals or coupling to its release cycle, a clean seam
 that works for XBlocks today (via an ``"ai_extensions"`` runtime service, the
 subject of :doc:`0005-xblock-ai-service-registration`) and for the forum,
 courseware, and other plugins next.
@@ -144,18 +143,18 @@ the contract live in a light package that is always safe to depend on, separate
 from the package that carries the LLM router and its unavoidable weight. An
 install that does not use AI does not pay for it. The arguments:
 
-- LLM routers are a costly dependency — many megabytes of downloads and a large
-  transitive tree.
+- LLM routers are a costly dependency, with many megabytes of downloads and a
+  large transitive tree.
 - They release often; keeping them separable lets the AI package follow that
   cadence independently, faster than the release rhythm of edx-platform's own
   dependencies.
 - For anyone not using AI, carrying the router makes no sense at all.
 - Keeping the router separable is part of an ongoing effort to keep dependency
-  hell out of the platform — an effort this decision stays in line with rather
-  than solves outright.
+  hell out of the platform. This decision stays in line with that effort rather
+  than solving it outright.
 
-B3. **Testable against the contract, without the engine.** A consumer — and the
-project itself — can test code against what the API is supposed to return, and
+B3. **Testable against the contract, without the engine.** A consumer, and the
+project itself, can test code against what the API is supposed to return, and
 check versions for compatibility, without installing the router and the whole AI
 stack. The light package carries enough of the contract (types, statuses, stubs)
 to test against on its own.
@@ -171,7 +170,7 @@ For now, and recorded so the surface is not asked to grow into them prematurely:
 - **Multiple interchangeable engines.** There is one engine; the API contract is
   "our ``api.py``," not a generic multi-vendor service specification, and there
   is no plugin-discovery mechanism for the engine.
-- **Exposing the LLM / router layer.** Internal by intent — and central to
+- **Exposing the LLM / router layer.** Internal by intent, and central to
   Decision B's ability to keep the weight out of the light package.
 
 Consequences
@@ -185,7 +184,7 @@ Consequences
   in the LLM router, and the AI package can track the router's fast release
   cadence on its own schedule.
 - The internals of the existing REST API may need reworking to align with what
-  the public surface exposes — normal evolution, accepted as a consequence.
+  the public surface exposes. This is normal evolution, accepted as a consequence.
 - Operator authority can override developer intent. This is accepted, because
   operator control is the goal, not a side effect.
 - Two open areas remain to be designed and are expected to return as follow-up
@@ -224,10 +223,8 @@ References
 **********
 
 - :doc:`0001-purpose-of-this-repo`
-- :doc:`0002-dynamic-workflow-configuration`
-- :doc:`0004-submission-as-chat-storage`
 - :doc:`0005-xblock-ai-service-registration`
-- OEP-0019: Developer Documentation —
+- OEP-0019: Developer Documentation.
   https://docs.openedx.org/projects/openedx-proposals/en/latest/best-practices/oep-0019-bp-developer-documentation.html
-- Community discussion, *Plugin-provided XBlock runtime services* —
+- Community discussion, *Plugin-provided XBlock runtime services*.
   https://discuss.openedx.org/t/plugin-provided-xblock-runtime-services/18682
