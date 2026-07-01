@@ -41,6 +41,11 @@ The takeaway: **almost everything already exists.** `api.py` is mostly a
 *thin, typed, stable façade* over machinery that's already here. The only new
 runtime object worth adding is `AIResponse`.
 
+#::: api.context may as well be called api.Scope. The model is an AIworkflowScope enough to set them apart, but close enough that we dont create confusion.
+#::: The design reason behind having a this template plus a JSON5 in the db was for convenience. We needed to have good defaults in code and easy to override capabilities.
+#::: As long as we maintain those two things, we could have profiles that are defined in code and they have a hook/loop where they can be overriden. Specially the provider configuration and the prompt
+
+
 ---
 
 ## 1. Package split — the engine is a *backend class*, not an entry point
@@ -93,6 +98,9 @@ The "engine" wraps the *existing* `LLMProcessor`; it is not a new parallel
 router. `LLMProcessor(config, user_session, extra_params)` stays the
 implementation — the engine is just the seam that lets the core name it
 without importing it.
+
+
+#::: no notes
 
 ---
 
@@ -150,6 +158,11 @@ class Context:
         )
 ```
 
+#::: renaming to scopecontext. resolve_scope is resolve profile. What I'm thinking is that we could have a method that lets you define a profile and call it by means of declaring the definition of the profile as we currently have in the file paths in the code. When calling it, the code passes the scopecontext info and the db lookup is made. If there is no hit, then it runs as defined in code, if there is a scope that matches, then we apply the json5 patch contained in the profile. (profile will require some changes to support this.)
+
+#::: re: naming. I had a hard time picking a name for this. Context is too loaded already. I am between selectors and qualifiers.
+
+
 > **Your note (line 153):** Context info currently lives in `AIWorkflowScope`,
 > which "is critical because it contains the only on/off lever in the system"
 > (`enabled`). With the *wrap* decision, `Context` is the transient key and the
@@ -179,13 +192,16 @@ that touches it. It exists, but you have to be ashamed to use it.
 class Actor:
     """Who the call is for. Feeds permission checks and xAPI events only."""
     user_id: int | None = None
-    roles: frozenset[str] = frozenset()   # course_staff, instructor, student…
+    roles: frozenset[str] = frozenset()   # course_staff, instructor, student…  #::: what I don't like about this Is that we must calculate the roles, which can be an expensive query and they can also be context dependent before we even know if we need them.
     # NOTE: no `language`, no `username` until something actually needs them.
 ```
 
 The principal method still takes the Django `user` object where permission
 backends need it (`permission_is_course_staff(user, course_id)`); `Actor` is
 the serializable shadow used for Celery hand-off and `_emit_workflow_event`.
+
+
+#::: What I'm thinking we could do differently is use something like the anonymized ID that already exists in the platform, or something like the actor uUID thats used for aspects. Pass that with the user_id and let consumers calculate the roles/permissions if need be.
 
 ---
 
@@ -262,6 +278,10 @@ class AIResponse:
         ...
 ```
 
+#::: I would need an example of use. A light one, for example a logger storage.
+#::: It makes sense to me but since we currently use edx_submissions I want to make sure we can keep it untangled.
+
+
 > **Your note (line 244) — Meta.** For now it is "whatever litellm returns";
 > the value is *consistency of what we expose*, evolvable later. So `Meta`
 > stays intentionally thin and is populated from
@@ -274,6 +294,8 @@ class Meta:
     usage: dict | None = None     # the serialized litellm Usage we already build
     profile_slug: str | None = None
 ```
+
+#::: possibly having the datetime is also important.
 
 ---
 
@@ -337,6 +359,11 @@ def get_status(*, context, user):
     return run(context=context, user=user, action="get_run_status")
 ```
 
+#::: What I'm sort of missing here is that we want to be able to define a profile and inmediately call it. As I put it in a different comment, we could have this by having the initial definition right there, and then doing the loop of calling the database to make sure there are no overwrites already.
+
+
+
+
 > **↯ correction (Attempt One §6).** There is no `evaluate()` and no `chat()`
 > here. `action` already selects the orchestrator method — sync/async/status is
 > `run`/`run_async`/`get_run_status`, not new verbs. The verb *is* the trunk;
@@ -378,6 +405,8 @@ def run_ad_hoc_profile(profile_slug, *, context: Context, user, user_input=None)
     """
     ...
 ```
+
+#::: this gets solved by my previous comment.
 
 The scope resolver itself (`get_profile`, `list_profiles_for_context`,
 `specificity_index`) is **already built and correct** — Attempt One's invented
@@ -438,6 +467,8 @@ class SessionHandle:
         ...
 ```
 
+#::: I'm neutral to this implementation. I don't see the need for the session handle if we have availability of the model, the Django model, but if the Django model were to live in the implementing package, then definitely I see the need for the session handle. So please clarify how this could be used.
+
 > This is a *wrapper*, not a new model — `AIWorkflowSession`,
 > `local_submission_id` (edX submissions), `remote_response_id` (provider
 > thread), and `get_combined_thread()` stay. The win is that
@@ -463,8 +494,8 @@ class SessionHandle:
 
 ```python
 # api.py
-from openedx_ai_extensions.workflows.orchestrators import BaseOrchestrator
-from openedx_ai_extensions.processors.llm.litellm_base_processor import LitellmProcessor
+from openedx_ai_extensions.workflows.orchestrators import BaseOrchestrator #::: this could be. probably also a more complete orchestrator as well
+from openedx_ai_extensions.processors.llm.litellm_base_processor import LitellmProcessor  #::: this most definitely we dont want to support. having litellm is internal to the framework.
 ```
 
 Grading fits here too:
@@ -500,6 +531,8 @@ class StreamingBody:
 
 The view keeps returning `StreamingHttpResponse(response.payload, …)` — no
 behavior change, just a typed handle in front of the same generator.
+
+#::: could we even refactor this in the current implementation to standardize and remove dependency on litellm? does it make sense?
 
 ---
 
@@ -551,6 +584,8 @@ def run_profile(self, profile_id, user_input):
     return response                        # typed AIResponse, .ok / .text / .payload
 ```
 
+#::: this would not be that bad, but I expect it to get better with the refactor from previous comments
+
 ### The REST view (`api/v1/workflows/views.py`)
 
 ```python
@@ -562,6 +597,8 @@ if is_generator(result):
     return StreamingHttpResponse(result, content_type="text/plain")
 return JsonResponse(result, status=200)
 ```
+
+#::: I'm not yet sure we would touch  workflows/views.py in this work. The object of these examples was to look at how it would look for the different Xblocks and other plugins that we know are using AI already. That would be the AI coach, xblock-ai-evaluation, ORA and badges
 
 ```python
 # after: one typed object decides the HTTP shape
