@@ -133,10 +133,13 @@ exposes. We commit to the following goals; the concrete mechanism is designed
 against them and refined with the community discussion.
 
 B1. **A natural, low-coupling extension point.** Consumers reach the API without
-importing framework internals or coupling to its release cycle, a clean seam
-that works for XBlocks today (via an ``"ai_extensions"`` runtime service, the
-subject of :doc:`0005-xblock-ai-service-registration`) and for the forum,
-courseware, and other plugins next.
+importing framework internals or coupling to its release cycle. For XBlocks,
+the leading candidate is an ``"ai_extensions"`` runtime service (the subject of
+:doc:`0005-xblock-ai-service-registration`); the same seam should generalize to
+the forum, courseware, and other plugins next. Whichever mechanism is chosen,
+what it hands back is the ``api.py`` surface itself, not a bespoke, per-service
+shape: the seam is a way to *reach* the API, never a second contract to
+maintain alongside it.
 
 B2. **The heavy weight is optional, via a library split.** The definitions and
 the contract live in a light package that is always safe to depend on, separate
