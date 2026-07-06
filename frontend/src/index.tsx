@@ -13,6 +13,10 @@ import {
 } from './library-problem-creator';
 import FlashcardCreator from './flashcard-study/components/FlashcardCreator';
 import FlashcardStudyResponse from './flashcard-study/components/FlashcardStudyResponse';
+import {
+  ContentSuggestionsRequest,
+  ContentSuggestionsResponse,
+} from './content-suggestions';
 
 export * as services from './services';
 
@@ -44,5 +48,7 @@ export {
   AIExtensionsCard,
   FlashcardCreator,
   FlashcardStudyResponse,
+  ContentSuggestionsRequest,
+  ContentSuggestionsResponse,
 };
 export type { RegistryEntry };

@@ -33,6 +33,10 @@ import {
   FlashcardCreator,
   FlashcardStudyResponse,
 } from './flashcard-study';
+import {
+  ContentSuggestionsRequest,
+  ContentSuggestionsResponse,
+} from './content-suggestions';
 import { PluginConfiguration } from './types';
 import { WORKFLOW_ACTIONS, WorkflowActionType, NO_RESPONSE_MSG } from './constants';
 
@@ -48,6 +52,8 @@ import messages from './messages';
   ['LibraryProblemCreatorResponse', LibraryProblemCreatorResponse],
   ['FlashcardCreator', FlashcardCreator],
   ['FlashcardStudyResponse', FlashcardStudyResponse],
+  ['ContentSuggestionsRequest', ContentSuggestionsRequest],
+  ['ContentSuggestionsResponse', ContentSuggestionsResponse],
 ].forEach(([id, component]) => registerEntry(
   REGISTRY_NAMES.COMPONENTS,
   { id: id as string, component: component as React.ComponentType<any> },
